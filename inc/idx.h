@@ -1,11 +1,12 @@
 #ifndef _IDX_H_
 #define _IDX_H_
 
-#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+
+#define IDX_HEAD_SIZE 4
 
 typedef struct {
     uint16_t magic;
@@ -15,7 +16,6 @@ typedef struct {
 } IDX_Header;
 
 typedef struct {
-    char file_path[PATH_MAX];
     FILE *fd;
     IDX_Header head;
 } IDX_File;
@@ -23,6 +23,8 @@ typedef struct {
 typedef enum {
     IDX_OK,
     IDX_ERROR,
+    IDX_ARG_ERROR,
+    IDX_FILE_ERROR,
 } IDX_Status;
 
 typedef enum {
