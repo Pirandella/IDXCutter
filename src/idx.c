@@ -1,4 +1,18 @@
 #include "idx.h"
+#include <string.h>
+
+#define IDX_TYPE_INDEX(type) ((uint8_t)(type - 8))
+
+static const char idx_data_type_str[7][7] = {"UINT8", "INT8", "", "INT16", "INT32", "FLOAT", "DOUBLE"};
+static const uint8_t idx_data_type_size[7] = {sizeof(uint8_t), sizeof(int8_t), 0, sizeof(int16_t), sizeof(int32_t), sizeof(float), sizeof(double)};
+
+static void _print_info(const IDX_File *const file, const char *const path)
+{
+    printf("FILE INFO:\n - Path: %s\n - Type: %s\n - Dimentions: %d\n", (path != NULL ? path : "---") , idx_data_type_str[IDX_TYPE_INDEX(file->head.type)], file->head.dimension_num);
+    for (uint8_t i = 0; i < file->head.dimension_num; i++)
+        printf("   -  D%-3d: %d\n", (i + 1), file->head.dimensions[i]);
+    printf(" - Offset: %ld\n - Block: %ld\n", file->data_offset, file->block_size);
+}
 
 IDX_Status idx_open(IDX_File *file, const char *path)
 {
@@ -15,19 +29,26 @@ IDX_Status idx_open(IDX_File *file, const char *path)
         printf("File read error!\n");
         return IDX_FILE_ERROR;
     }
-    fread(file->head.dimentions, sizeof(uint32_t) * file->head.dimention_num, 1, file->fd);
+    if (file->head.dimension_num == 0) {
+        printf("File without data!\n");
+        return IDX_FILE_ERROR;
+    }
+
+    fread(file->head.dimensions, sizeof(uint32_t) * file->head.dimension_num, 1, file->fd);
     if (ferror(file->fd) != 0) {
         printf("Dimention read error!\n");
         return IDX_FILE_ERROR;
     }
-    file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * file->head.dimention_num);
-    printf("Data offset: %ld\n", file->data_offset);
-
-    printf("FILE INFO:\n - Path: %s\n - Type: %d\n - Dimentions: %d\n", path, file->head.type_size, file->head.dimention_num);
-    for (uint8_t i = 0; i < file->head.dimention_num; i++) {
-        file->head.dimentions[i] = ntohl(file->head.dimentions[i]);
-        printf("   -  D%-3d: %d\n", (i + 1), file->head.dimentions[i]);
+    file->block_size = 1;
+    for (uint8_t i = 0; i < file->head.dimension_num; i++) {
+        file->head.dimensions[i] = ntohl(file->head.dimensions[i]);
+        if (file->head.dimension_num > 2 && i == 0) continue;
+        file->block_size *= file->head.dimensions[i];
     }
+    file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
+    file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * file->head.dimension_num);
+
+    _print_info(file, path);
 
     return IDX_OK;
 }
@@ -39,19 +60,45 @@ void idx_close(IDX_File *file)
     fclose(file->fd);
 }
 
+IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, const uint32_t *const sizes)
+{
+    if ((file == NULL) || (dimensions == 0) || (sizes == NULL)) return IDX_ARG_ERROR;
+
+    file->head.magic = 0;
+    file->head.type = (uint8_t)type;
+    file->head.dimension_num = dimensions;
+    file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * dimensions);
+    // memcpy(file->head.dimensions, sizes, sizeof(uint32_t) * dimensions);
+    file->block_size = 1;
+    for (uint8_t i = 0; i < file->head.dimension_num; i++) {
+        file->head.dimensions[i] = sizes[i];
+        if (file->head.dimension_num > 2 && i == 0) continue;
+        file->block_size *= file->head.dimensions[i];
+    }
+    file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
+
+    _print_info(file, NULL);
+
+    return IDX_OK;
+}
+
 IDX_Status idx_read_block(const IDX_File *const file, void *const buffer, size_t size, size_t index)
 {
     if ((file == NULL) || (buffer == NULL)) {
         printf("Nonnullable input argument is NULL!\n");
         return IDX_ARG_ERROR;
     }
-    if (file->head.dimentions[0] <= index) {
+    if (file->head.dimensions[0] <= index) {
         printf("Out of bounds index!\n");
+        return IDX_ARG_ERROR;
+    }
+    if (file->block_size > size) {
+        printf("Input buffer is smaller then block size!\n");
         return IDX_ARG_ERROR;
     }
 
     fseek(file->fd, file->data_offset + (index * size), SEEK_SET);
-    fread(buffer, size, 1, file->fd);
+    fread(buffer, file->block_size, 1, file->fd);
     if (ferror(file->fd) != 0) {
         printf("Block read error!\n");
         return IDX_FILE_ERROR;

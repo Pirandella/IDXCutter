@@ -29,5 +29,8 @@ int main(int argc, char **argv)
     idx_close(&images);
     idx_close(&labels);
 
+    IDX_File tmp;
+    idx_set_header(&tmp, IDX_FLOAT, 2, (uint32_t[]){50, 76});
+
     return 0;
 }
