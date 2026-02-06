@@ -3,7 +3,6 @@
 IDX_Status idx_open(IDX_File *file, const char *path)
 {
     if ((file == NULL) || (path == NULL)) return IDX_ARG_ERROR;
-    file->head.dimentions = NULL;
 
     file->fd = fopen(path, "rwb");
     if (file->fd == NULL) {
@@ -16,17 +15,13 @@ IDX_Status idx_open(IDX_File *file, const char *path)
         printf("File read error!\n");
         return IDX_FILE_ERROR;
     }
-    size_t dim_size = sizeof(uint32_t) * file->head.dimention_num;
-    file->head.dimentions = (uint32_t *)malloc(dim_size);
-    if (file->head.dimentions == NULL) {
-        printf("Memory allocation error!\n");
-        return IDX_ERROR;
-    }
-    fread(file->head.dimentions, dim_size, 1, file->fd);
+    fread(file->head.dimentions, sizeof(uint32_t) * file->head.dimention_num, 1, file->fd);
     if (ferror(file->fd) != 0) {
         printf("Dimention read error!\n");
         return IDX_FILE_ERROR;
     }
+    file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * file->head.dimention_num);
+    printf("Data offset: %ld\n", file->data_offset);
 
     printf("FILE INFO:\n - Path: %s\n - Type: %d\n - Dimentions: %d\n", path, file->head.type_size, file->head.dimention_num);
     for (uint8_t i = 0; i < file->head.dimention_num; i++) {
@@ -40,18 +35,32 @@ IDX_Status idx_open(IDX_File *file, const char *path)
 void idx_close(IDX_File *file)
 {
     if (file == NULL) return;
-    if (file->head.dimentions == NULL) return;
 
     fclose(file->fd);
-    free(file->head.dimentions);
 }
 
-IDX_Status idx_read(const IDX_File *const file, void *buffer, size_t size, IDX_Position whence, off_t offset)
+IDX_Status idx_read_block(const IDX_File *const file, void *const buffer, size_t size, size_t index)
 {
+    if ((file == NULL) || (buffer == NULL)) {
+        printf("Nonnullable input argument is NULL!\n");
+        return IDX_ARG_ERROR;
+    }
+    if (file->head.dimentions[0] <= index) {
+        printf("Out of bounds index!\n");
+        return IDX_ARG_ERROR;
+    }
+
+    fseek(file->fd, file->data_offset + (index * size), SEEK_SET);
+    fread(buffer, size, 1, file->fd);
+    if (ferror(file->fd) != 0) {
+        printf("Block read error!\n");
+        return IDX_FILE_ERROR;
+    }
+
     return IDX_OK;
 }
 
-IDX_Status idx_write(IDX_File *file, const void *const buffer, size_t size, IDX_Position whence, off_t offset)
+IDX_Status idx_write_block(IDX_File *file, const void *const buffer, size_t size, size_t index)
 {
     return IDX_OK;
 }
