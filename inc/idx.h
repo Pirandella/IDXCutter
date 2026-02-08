@@ -38,7 +38,7 @@ typedef enum {
 } IDX_Status;
 
 IDX_Status idx_open(IDX_File *file, const char *path);
-void idx_close();
+void idx_close(IDX_File *file);
 
 IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, const uint32_t *const sizes);
 

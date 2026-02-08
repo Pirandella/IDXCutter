@@ -57,3 +57,4 @@ dkms.conf
 # Project specific files
 IDXCutter
 *.idx*-ubyte
+compile_commands.json
