@@ -31,6 +31,8 @@ int main(int argc, char **argv)
 
     IDX_File tmp;
     idx_set_header(&tmp, IDX_FLOAT, 2, (uint32_t[]){50, 76});
+    idx_open(&tmp, "./tmp.idx");
+    idx_close(&tmp);
 
     return 0;
 }

@@ -1,14 +1,19 @@
 #include "idx.h"
-#include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
 
 #define IDX_TYPE_INDEX(type) ((uint8_t)(type - 8))
 
 static const char idx_data_type_str[7][7] = {"UINT8", "INT8", "", "INT16", "INT32", "FLOAT", "DOUBLE"};
-static const uint8_t idx_data_type_size[7] = {sizeof(uint8_t), sizeof(int8_t), 0, sizeof(int16_t), sizeof(int32_t), sizeof(float), sizeof(double)};
+static const uint8_t idx_data_type_size[7] = {sizeof(uint8_t), sizeof(int8_t), 0, sizeof(int16_t),
+                                              sizeof(int32_t), sizeof(float), sizeof(double)};
 
 static void _print_info(const IDX_File *const file, const char *const path)
 {
-    printf("FILE INFO:\n - Path: %s\n - Type: %s\n - Dimentions: %d\n", (path != NULL ? path : "---") , idx_data_type_str[IDX_TYPE_INDEX(file->head.type)], file->head.dimension_num);
+    printf("FILE INFO:\n - Path: %s\n - Type: %s\n - Dimentions: %d\n", (path != NULL ? path : "---"), 
+            idx_data_type_str[IDX_TYPE_INDEX(file->head.type)], file->head.dimension_num);
     for (uint8_t i = 0; i < file->head.dimension_num; i++)
         printf("   -  D%-3d: %d\n", (i + 1), file->head.dimensions[i]);
     printf(" - Offset: %ld\n - Block: %ld\n", file->data_offset, file->block_size);
@@ -17,36 +22,60 @@ static void _print_info(const IDX_File *const file, const char *const path)
 IDX_Status idx_open(IDX_File *file, const char *path)
 {
     if ((file == NULL) || (path == NULL)) return IDX_ARG_ERROR;
+    
+    if (!access(path, F_OK)) {
+        file->fd = fopen(path, "r");
+        if (file->fd == NULL) {
+            perror("Cannot open IDX file:");
+            return IDX_FILE_ERROR;
+        }
+        struct stat st;
+        if (stat(path, &st)) {
+            printf("Cannot get file stats!\n");
+            return IDX_FILE_ERROR;
+        }
+        if (st.st_size == 0) {
+            printf("Empty file!\n");
+            return IDX_FILE_ERROR;
+        }
 
-    file->fd = fopen(path, "rwb");
-    if (file->fd == NULL) {
-        perror("Cannot open IDX file:");
-        return IDX_FILE_ERROR;
-    }
+        fread(&file->head, IDX_HEAD_SIZE, 1, file->fd);
+        if (ferror(file->fd) != 0) {
+            printf("File read error!\n");
+            return IDX_FILE_ERROR;
+        }
 
-    fread(&file->head, IDX_HEAD_SIZE, 1, file->fd);
-    if (ferror(file->fd) != 0) {
-        printf("File read error!\n");
-        return IDX_FILE_ERROR;
+        if (file->head.dimension_num == 0) {
+            printf("File without data structure!\n");
+            return IDX_FILE_ERROR;
+        }
+        
+        fread(file->head.dimensions, sizeof(uint32_t) * file->head.dimension_num, 1, file->fd);
+        if (ferror(file->fd) != 0) {
+            printf("Dimention read error!\n");
+            return IDX_FILE_ERROR;
+        }
+        file->block_size = 1;
+        for (uint8_t i = 0; i < file->head.dimension_num; i++) {
+            file->head.dimensions[i] = ntohl(file->head.dimensions[i]);
+            if (((file->head.dimension_num > 2) && (i == 0)) || (file->head.dimension_num == 1)) continue;
+            file->block_size *= file->head.dimensions[i];
+        }
+        file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
+        file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * file->head.dimension_num);
+    } else {
+        file->fd = fopen(path, "w");
+        if (file->fd == NULL) {
+            perror("Cannot create IDX file:");
+            return IDX_FILE_ERROR;
+        }
+        const size_t head_size = IDX_HEAD_SIZE + (file->head.dimension_num * sizeof(uint32_t));
+        for (uint8_t i = 0; i < file->head.dimension_num; i++)
+            file->head.dimensions[i] = htonl(file->head.dimensions[i]);
+        fwrite(&file->head, head_size, 1, file->fd);
+        for (uint8_t i = 0; i < file->head.dimension_num; i++)
+            file->head.dimensions[i] = ntohl(file->head.dimensions[i]);
     }
-    if (file->head.dimension_num == 0) {
-        printf("File without data!\n");
-        return IDX_FILE_ERROR;
-    }
-
-    fread(file->head.dimensions, sizeof(uint32_t) * file->head.dimension_num, 1, file->fd);
-    if (ferror(file->fd) != 0) {
-        printf("Dimention read error!\n");
-        return IDX_FILE_ERROR;
-    }
-    file->block_size = 1;
-    for (uint8_t i = 0; i < file->head.dimension_num; i++) {
-        file->head.dimensions[i] = ntohl(file->head.dimensions[i]);
-        if (((file->head.dimension_num > 2) && (i == 0)) || (file->head.dimension_num == 1)) continue;
-        file->block_size *= file->head.dimensions[i];
-    }
-    file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
-    file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * file->head.dimension_num);
 
     _print_info(file, path);
 
@@ -68,7 +97,6 @@ IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, co
     file->head.type = (uint8_t)type;
     file->head.dimension_num = dimensions;
     file->data_offset = IDX_HEAD_SIZE + (sizeof(uint32_t) * dimensions);
-    // memcpy(file->head.dimensions, sizes, sizeof(uint32_t) * dimensions);
     file->block_size = 1;
     for (uint8_t i = 0; i < file->head.dimension_num; i++) {
         file->head.dimensions[i] = sizes[i];
@@ -76,8 +104,6 @@ IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, co
         file->block_size *= file->head.dimensions[i];
     }
     file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
-
-    _print_info(file, NULL);
 
     return IDX_OK;
 }

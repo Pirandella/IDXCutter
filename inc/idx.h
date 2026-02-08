@@ -1,10 +1,8 @@
 #ifndef _IDX_H_
 #define _IDX_H_
 
-#define _POSIX_C_SOURCE 1
 #include <stdio.h>
 #include <stdint.h>
-#include <arpa/inet.h>
 
 #define IDX_HEAD_SIZE 4
 
@@ -36,6 +34,7 @@ typedef enum {
     IDX_ERROR,
     IDX_ARG_ERROR,
     IDX_FILE_ERROR,
+    IDX_EMPTY_FILE,
 } IDX_Status;
 
 IDX_Status idx_open(IDX_File *file, const char *path);
