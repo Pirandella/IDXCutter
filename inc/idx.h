@@ -41,6 +41,7 @@ IDX_Status idx_open(IDX_File *file, const char *path);
 void idx_close(IDX_File *file);
 
 IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, const uint32_t *const sizes);
+size_t idx_block_size(const IDX_File *const file);
 
 IDX_Status idx_read_block(const IDX_File *const file, void *const buffer, size_t size, size_t index);
 IDX_Status idx_write_block(IDX_File *file, const void *const buffer, size_t size, size_t index);
