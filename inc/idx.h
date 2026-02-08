@@ -27,6 +27,7 @@ typedef struct {
     IDX_Header head;
     size_t data_offset;
     size_t block_size;
+    size_t file_size;
 } IDX_File;
 
 typedef enum {

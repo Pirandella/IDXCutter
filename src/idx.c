@@ -8,13 +8,13 @@
 
 static const char idx_data_type_str[7][7] = {"UINT8", "INT8", "", "INT16", "INT32", "FLOAT", "DOUBLE"};
 static const uint8_t idx_data_type_size[7] = {sizeof(uint8_t), sizeof(int8_t), 0, sizeof(int16_t),
-                                              sizeof(int32_t), sizeof(float), sizeof(double)};
-
-static void _print_info(const IDX_File *const file, const char *const path)
-{
-    printf("FILE INFO:\n - Path: %s\n - Type: %s\n - Dimentions: %d\n", (path != NULL ? path : "---"), 
-            idx_data_type_str[IDX_TYPE_INDEX(file->head.type)], file->head.dimension_num);
-    for (uint8_t i = 0; i < file->head.dimension_num; i++)
+    sizeof(int32_t), sizeof(float), sizeof(double)};
+    
+    static void _print_info(const IDX_File *const file, const char *const path)
+    {
+        printf("FILE INFO:\n - Path: %s\n - Type: %s\n - Dimentions: %d\n", (path != NULL ? path : "---"), 
+        idx_data_type_str[IDX_TYPE_INDEX(file->head.type)], file->head.dimension_num);
+        for (uint8_t i = 0; i < file->head.dimension_num; i++)
         printf("   -  D%-3d: %d\n", (i + 1), file->head.dimensions[i]);
     printf(" - Offset: %ld\n - Block: %ld\n", file->data_offset, file->block_size);
 }
@@ -34,7 +34,8 @@ IDX_Status idx_open(IDX_File *file, const char *path)
             printf("Cannot get file stats!\n");
             return IDX_FILE_ERROR;
         }
-        if (st.st_size == 0) {
+        file->file_size = (size_t)st.st_size;
+        if (file->file_size == 0) {
             printf("Empty file!\n");
             return IDX_FILE_ERROR;
         }
@@ -44,7 +45,6 @@ IDX_Status idx_open(IDX_File *file, const char *path)
             printf("File read error!\n");
             return IDX_FILE_ERROR;
         }
-
         if (file->head.dimension_num == 0) {
             printf("File without data structure!\n");
             return IDX_FILE_ERROR;
@@ -69,10 +69,9 @@ IDX_Status idx_open(IDX_File *file, const char *path)
             perror("Cannot create IDX file:");
             return IDX_FILE_ERROR;
         }
-        const size_t head_size = IDX_HEAD_SIZE + (file->head.dimension_num * sizeof(uint32_t));
         for (uint8_t i = 0; i < file->head.dimension_num; i++)
             file->head.dimensions[i] = htonl(file->head.dimensions[i]);
-        fwrite(&file->head, head_size, 1, file->fd);
+        fwrite(&file->head, file->data_offset, 1, file->fd);
         for (uint8_t i = 0; i < file->head.dimension_num; i++)
             file->head.dimensions[i] = ntohl(file->head.dimensions[i]);
     }
@@ -104,6 +103,7 @@ IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, co
         file->block_size *= file->head.dimensions[i];
     }
     file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
+    file->file_size = file->data_offset;
 
     return IDX_OK;
 }
@@ -128,7 +128,7 @@ IDX_Status idx_read_block(const IDX_File *const file, void *const buffer, size_t
         return IDX_ARG_ERROR;
     }
 
-    fseek(file->fd, file->data_offset + (index * size), SEEK_SET);
+    fseek(file->fd, file->data_offset + (index * file->block_size), SEEK_SET);
     fread(buffer, file->block_size, 1, file->fd);
     if (ferror(file->fd) != 0) {
         printf("Block read error!\n");
@@ -139,6 +139,29 @@ IDX_Status idx_read_block(const IDX_File *const file, void *const buffer, size_t
 }
 
 IDX_Status idx_write_block(IDX_File *file, const void *const buffer, size_t size, size_t index)
-{
+{    
+    if ((file == NULL) || (buffer == NULL)) {
+        printf("Nonnullable input argument is NULL!\n");
+        return IDX_ARG_ERROR;
+    }
+    if (file->block_size > size) {
+        printf("Input buffer is smaller then block size! Block size: %ld; Buffer size: %ld\n", file->block_size, size);
+        return IDX_ARG_ERROR;
+    }
+    if ((fcntl(file->fd->_fileno, F_GETFL) & O_ACCMODE) == O_RDONLY) {
+        printf("You cannnot write to READ ONLY file!\n");
+        return IDX_FILE_ERROR;
+    }
+    size_t offset = file->data_offset + (index * file->block_size);
+    if (offset >= file->file_size) offset = file->file_size;
+
+    fseek(file->fd, offset, SEEK_SET);
+    fwrite(buffer, file->block_size, 1, file->fd);
+    if (ferror(file->fd) != 0) {
+        printf("Block write error!\n");
+        return IDX_FILE_ERROR;
+    }
+    file->file_size += file->block_size;
+
     return IDX_OK;
 }

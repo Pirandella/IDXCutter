@@ -30,8 +30,13 @@ int main(int argc, char **argv)
     idx_close(&labels);
 
     IDX_File tmp;
-    idx_set_header(&tmp, IDX_FLOAT, 2, (uint32_t[]){50, 76});
+    idx_set_header(&tmp, IDX_UINT8, 2, (uint32_t[]){2, 2});
     idx_open(&tmp, "./tmp.idx");
+    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 2);
+    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 2);
+    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 2);
+    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 3);
+    idx_write_block(&tmp, (uint8_t []){5, 6, 7, 8}, idx_block_size(&tmp), 2);
     idx_close(&tmp);
 
     return 0;
