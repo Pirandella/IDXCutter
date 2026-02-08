@@ -1,5 +1,6 @@
 #include "idx.h"
 #include <fcntl.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
@@ -24,14 +25,15 @@ IDX_Status idx_open(IDX_File *file, const char *path)
     if ((file == NULL) || (path == NULL)) return IDX_ARG_ERROR;
     
     if (!access(path, F_OK)) {
-        file->fd = fopen(path, "r");
+        file->fd = fopen(path, "r+");
         if (file->fd == NULL) {
             perror("Cannot open IDX file:");
             return IDX_FILE_ERROR;
         }
         struct stat st;
         if (stat(path, &st)) {
-            printf("Cannot get file stats!\n");
+            perror("");
+            // printf("Cannot get file stats!\n");
             return IDX_FILE_ERROR;
         }
         file->file_size = (size_t)st.st_size;
@@ -162,6 +164,7 @@ IDX_Status idx_write_block(IDX_File *file, const void *const buffer, size_t size
         return IDX_FILE_ERROR;
     }
     file->file_size += file->block_size;
+    fflush(file->fd);
 
     return IDX_OK;
 }

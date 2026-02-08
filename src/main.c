@@ -1,4 +1,7 @@
 #include "idx.h"
+#include <stdlib.h>
+#include <time.h>
+#include <string.h>
 
 static void print_mnist(const void *const img, uint8_t label, size_t size)
 {
@@ -12,32 +15,42 @@ static void print_mnist(const void *const img, uint8_t label, size_t size)
     }
 }
 
+#define DATASET_SIZE 100
+
 int main(int argc, char **argv)
 {
+    srand(time(NULL));
 
-    IDX_File images, labels;
+    IDX_File src_images, src_labels, dest_images, dest_labels;
 
-    idx_open(&images, "./t10k-images.idx3-ubyte");
-    idx_open(&labels, "./t10k-labels.idx1-ubyte");
+    if (idx_open(&src_images, "./t10k-images.idx3-ubyte") != IDX_OK) return -1;
+    if (idx_open(&src_labels, "./t10k-labels.idx1-ubyte") != IDX_OK) return -1;
 
-    uint8_t buff[28 * 28];
+    memcpy(&dest_images, &src_images, sizeof(IDX_File));
+    memcpy(&dest_labels, &src_labels, sizeof(IDX_File));
+    dest_images.head.dimensions[0] = DATASET_SIZE;
+    dest_labels.head.dimensions[0] = DATASET_SIZE;
+
+    if (idx_open(&dest_images, "./images-dataset.idx3-ubyte") != IDX_OK) return -1;
+    if (idx_open(&dest_labels, "./labels-dataset.idx3-ubyte") != IDX_OK) return -1;
+
+    uint8_t buff[src_images.block_size];
     uint8_t label;
-    idx_read_block(&images, buff, sizeof(buff), 5464);
-    idx_read_block(&labels, &label, 1, 5464);
-    print_mnist(buff, label, sizeof(buff));
 
-    idx_close(&images);
-    idx_close(&labels);
+    size_t rand_index = 0;
+    for (size_t i = 0; i < DATASET_SIZE; i++) {
+        rand_index = rand() % src_images.head.dimensions[0];
+        idx_read_block(&src_images, buff, src_images.block_size, rand_index);
+        idx_read_block(&src_labels, &label, 1, rand_index);
+        idx_write_block(&dest_images, buff, dest_images.block_size, i);
+        idx_write_block(&dest_labels, &label, 1, i);
+        print_mnist(buff, label, src_images.block_size);
+    }
 
-    IDX_File tmp;
-    idx_set_header(&tmp, IDX_UINT8, 2, (uint32_t[]){2, 2});
-    idx_open(&tmp, "./tmp.idx");
-    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 2);
-    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 2);
-    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 2);
-    idx_write_block(&tmp, (uint8_t []){1, 2, 3, 4}, idx_block_size(&tmp), 3);
-    idx_write_block(&tmp, (uint8_t []){5, 6, 7, 8}, idx_block_size(&tmp), 2);
-    idx_close(&tmp);
+    idx_close(&src_images);
+    idx_close(&src_labels);
+    idx_close(&dest_images);
+    idx_close(&dest_labels);
 
     return 0;
 }
