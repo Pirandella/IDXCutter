@@ -1,6 +1,7 @@
 #ifndef _IDX_H_
 #define _IDX_H_
 
+#define _POSIX_C_SOURCE 1
 #include <stdio.h>
 #include <stdint.h>
 #include <arpa/inet.h>

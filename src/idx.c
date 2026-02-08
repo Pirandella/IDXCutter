@@ -42,7 +42,7 @@ IDX_Status idx_open(IDX_File *file, const char *path)
     file->block_size = 1;
     for (uint8_t i = 0; i < file->head.dimension_num; i++) {
         file->head.dimensions[i] = ntohl(file->head.dimensions[i]);
-        if (file->head.dimension_num > 2 && i == 0) continue;
+        if (((file->head.dimension_num > 2) && (i == 0)) || (file->head.dimension_num == 1)) continue;
         file->block_size *= file->head.dimensions[i];
     }
     file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
@@ -72,7 +72,7 @@ IDX_Status idx_set_header(IDX_File *file, IDX_Types type, uint8_t dimensions, co
     file->block_size = 1;
     for (uint8_t i = 0; i < file->head.dimension_num; i++) {
         file->head.dimensions[i] = sizes[i];
-        if (file->head.dimension_num > 2 && i == 0) continue;
+        if (((file->head.dimension_num > 2) && (i == 0)) || (file->head.dimension_num == 1)) continue;
         file->block_size *= file->head.dimensions[i];
     }
     file->block_size *= idx_data_type_size[IDX_TYPE_INDEX(file->head.type)];
@@ -93,7 +93,7 @@ IDX_Status idx_read_block(const IDX_File *const file, void *const buffer, size_t
         return IDX_ARG_ERROR;
     }
     if (file->block_size > size) {
-        printf("Input buffer is smaller then block size!\n");
+        printf("Input buffer is smaller then block size! Block size: %ld; Buffer size: %ld\n", file->block_size, size);
         return IDX_ARG_ERROR;
     }
 
